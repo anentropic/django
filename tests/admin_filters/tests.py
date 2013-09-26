@@ -464,7 +464,7 @@ class ListFiltersTests(TestCase):
 
         # Make sure the correct queryset is returned
         queryset = changelist.get_queryset(request)
-        self.assertEqual(list(queryset), [self.djangonaut_book, self.bio_book])
+        self.assertEqual(list(queryset), [self.bio_book, self.djangonaut_book])
 
     def test_simplelistfilter(self):
         modeladmin = DecadeFilterBookAdmin(Book, site)

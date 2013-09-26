@@ -361,7 +361,15 @@ class BaseModelAdmin(six.with_metaclass(RenameBaseModelAdminMethods)):
         if len(parts) == 1:
             return True
         clean_lookup = LOOKUP_SEP.join(parts)
-        return clean_lookup in self.list_filter or clean_lookup == self.date_hierarchy
+        valid_lookups = [self.date_hierarchy]
+        for filter_item in self.list_filter:
+            if callable(filter_item):
+                valid_lookups.append(filter_item.parameter_name)
+            elif isinstance(filter_item, (list, tuple)):
+                valid_lookups.append(filter_item[0])
+            else:
+                valid_lookups.append(filter_item)
+        return clean_lookup in valid_lookups
 
     def has_add_permission(self, request):
         """
