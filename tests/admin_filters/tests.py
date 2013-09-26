@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 import datetime
 
 from django.contrib.admin import (site, ModelAdmin, SimpleListFilter,
-    BooleanFieldListFilter)
+    BooleanFieldListFilter, AllValuesFieldListFilter)
 from django.contrib.admin.views.main import ChangeList
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
@@ -102,6 +102,9 @@ class BookAdmin(ModelAdmin):
 
 class BookAdminWithTupleBooleanFilter(BookAdmin):
     list_filter = ('year', 'author', 'contributors', ('is_best_seller', BooleanFieldListFilter), 'date_registered', 'no')
+
+class BookAdminWithTupleAllValuesFilter(BookAdmin):
+    list_filter = ('year', ('author__email', AllValuesFieldListFilter), 'contributors', 'is_best_seller', 'date_registered', 'no')
 
 class DecadeFilterBookAdmin(ModelAdmin):
     list_filter = ('author', DecadeListFilterWithTitleAndParameter)
@@ -447,6 +450,21 @@ class ListFiltersTests(TestCase):
         choice = select_by(filterspec.choices(changelist), "display", "Unknown")
         self.assertEqual(choice['selected'], True)
         self.assertEqual(choice['query_string'], '?is_best_seller__isnull=True')
+
+    def test_allvaluesfieldlistfilter_tuple(self):
+        modeladmin = BookAdminWithTupleAllValuesFilter(Book, site)
+        self.verify_allvaluesfieldlistfilter(modeladmin)
+
+    def verify_allvaluesfieldlistfilter(self, modeladmin):
+        request = self.request_factory.get('/')
+        changelist = self.get_changelist(request, Book, modeladmin)
+
+        request = self.request_factory.get('/', {'author__email': 'alfred@example.com'})
+        changelist = self.get_changelist(request, Book, modeladmin)
+
+        # Make sure the correct queryset is returned
+        queryset = changelist.get_queryset(request)
+        self.assertEqual(list(queryset), [self.djangonaut_book, self.bio_book])
 
     def test_simplelistfilter(self):
         modeladmin = DecadeFilterBookAdmin(Book, site)
