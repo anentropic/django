@@ -93,6 +93,9 @@ class DepartmentListFilterLookupWithNonStringValue(SimpleListFilter):
         if self.value():
             return queryset.filter(department__id=self.value())
 
+class DepartmentListFilterLookupWithUnderscoredParameter(DepartmentListFilterLookupWithNonStringValue):
+    parameter_name = 'department__whatever'
+
 class CustomUserAdmin(UserAdmin):
     list_filter = ('books_authored', 'books_contributed')
 
@@ -103,7 +106,7 @@ class BookAdmin(ModelAdmin):
 class BookAdminWithTupleBooleanFilter(BookAdmin):
     list_filter = ('year', 'author', 'contributors', ('is_best_seller', BooleanFieldListFilter), 'date_registered', 'no')
 
-class BookAdminWithTupleAllValuesFilter(BookAdmin):
+class BookAdminWithUnderscoreLookupAndTuple(BookAdmin):
     list_filter = ('year', ('author__email', AllValuesFieldListFilter), 'contributors', 'is_best_seller', 'date_registered', 'no')
 
 class DecadeFilterBookAdmin(ModelAdmin):
@@ -138,6 +141,9 @@ class EmployeeAdmin(ModelAdmin):
 
 class DepartmentFilterEmployeeAdmin(EmployeeAdmin):
     list_filter = [DepartmentListFilterLookupWithNonStringValue, ]
+
+class DepartmentFilterUnderscoredEmployeeAdmin(EmployeeAdmin):
+    list_filter = [DepartmentListFilterLookupWithUnderscoredParameter, ]
 
 
 class ListFiltersTests(TestCase):
@@ -451,11 +457,16 @@ class ListFiltersTests(TestCase):
         self.assertEqual(choice['selected'], True)
         self.assertEqual(choice['query_string'], '?is_best_seller__isnull=True')
 
-    def test_allvaluesfieldlistfilter_tuple(self):
-        modeladmin = BookAdminWithTupleAllValuesFilter(Book, site)
-        self.verify_allvaluesfieldlistfilter(modeladmin)
+    def test_fieldlistfilter_underscorelookup_tuple(self):
+        """
+        Ensure ('fieldpath', ClassName ) lookups pass lookup_allowed checks
+        when fieldpath contains double-underscore in value.
+        Refs #19182
+        """
+        modeladmin = BookAdminWithUnderscoreLookupAndTuple(Book, site)
+        self.verify_fieldlistfilter_underscorelookup_tuple(modeladmin)
 
-    def verify_allvaluesfieldlistfilter(self, modeladmin):
+    def verify_fieldlistfilter_underscorelookup_tuple(self, modeladmin):
         request = self.request_factory.get('/')
         changelist = self.get_changelist(request, Book, modeladmin)
 
@@ -704,6 +715,28 @@ class ListFiltersTests(TestCase):
         self.assertEqual(choices[1]['display'], 'DEV')
         self.assertEqual(choices[1]['selected'], True)
         self.assertEqual(choices[1]['query_string'], '?department=%s' % self.john.pk)
+
+    def test_lookup_with_non_string_value_underscored(self):
+        """
+        Ensure SimpleListFilter lookups pass lookup_allowed checks when
+        parameter_name attribute contains double-underscore value.
+        Refs #19182
+        """
+
+        modeladmin = DepartmentFilterUnderscoredEmployeeAdmin(Employee, site)
+        request = self.request_factory.get('/', {'department__whatever': self.john.pk})
+        changelist = self.get_changelist(request, Employee, modeladmin)
+
+        queryset = changelist.get_queryset(request)
+
+        self.assertEqual(list(queryset), [self.john])
+
+        filterspec = changelist.get_filters(request)[0][-1]
+        self.assertEqual(force_text(filterspec.title), 'department')
+        choices = list(filterspec.choices(changelist))
+        self.assertEqual(choices[1]['display'], 'DEV')
+        self.assertEqual(choices[1]['selected'], True)
+        self.assertEqual(choices[1]['query_string'], '?department__whatever=%s' % self.john.pk)
 
     def test_fk_with_to_field(self):
         """
